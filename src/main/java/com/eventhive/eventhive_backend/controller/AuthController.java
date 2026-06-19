@@ -9,7 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import com.eventhive.eventhive_backend.dto.RefreshTokenRequest;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -42,5 +42,19 @@ public class AuthController {
 
         return ResponseEntity
                 .ok(ApiResponse.success("Login successful", response));
+    }
+
+    /**
+     * POST /api/auth/refresh
+     * Exchanges a valid refresh token for a new access + refresh token pair.
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<AuthResponse>> refresh(
+            @Valid @RequestBody RefreshTokenRequest request) {
+
+        AuthResponse response = authService.refresh(request);
+
+        return ResponseEntity
+                .ok(ApiResponse.success("Token refreshed successfully", response));
     }
 }

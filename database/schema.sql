@@ -1,13 +1,17 @@
 
-CREATE TABLE roles (
+-- EVENTHIVE DATABASE SCHEMA
+
+
+CREATE TABLE IF NOT EXISTS roles (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     role_name VARCHAR(20) NOT NULL UNIQUE
 );
 
--- Insert the 3 fixed roles
-INSERT INTO roles (role_name) VALUES ('ADMIN'), ('ORGANIZER'), ('ATTENDEE');
+
+INSERT IGNORE INTO roles (role_name) VALUES ('ADMIN'), ('ORGANIZER'), ('ATTENDEE');
 
 
+CREATE TABLE IF NOT EXISTS users (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
@@ -18,12 +22,12 @@ INSERT INTO roles (role_name) VALUES ('ADMIN'), ('ORGANIZER'), ('ATTENDEE');
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    
+   
     INDEX idx_users_email (email)
 );
 
 
-CREATE TABLE user_roles (
+CREATE TABLE IF NOT EXISTS user_roles (
     user_id BIGINT NOT NULL,
     role_id BIGINT NOT NULL,
 
@@ -32,3 +36,58 @@ CREATE TABLE user_roles (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
 );
+
+-- ------------------------------------------------------------
+-- TABLE: venues  (separate table, NOT columns on events — see normalization note)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS venues (
+    id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name           VARCHAR(150) NOT NULL,
+    address        VARCHAR(255) NOT NULL,
+    city           VARCHAR(100) NOT NULL,
+    total_capacity INT NOT NULL,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- ------------------------------------------------------------
+-- TABLE: categories  (lookup table, like roles)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS categories (
+    id   BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
+);
+
+INSERT IGNORE INTO categories (name) VALUES
+    ('Music'), ('Technology'), ('Business'), ('Sports'), ('Arts'), ('Food');
+
+-- ------------------------------------------------------------
+-- TABLE: events
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS events (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title           VARCHAR(200) NOT NULL,
+    description     TEXT,
+    status          VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    event_date      DATE NOT NULL,
+    start_time      TIME,
+    end_time        TIME,
+    banner_url      VARCHAR(500),
+    available_seats INT,
+    average_rating  DOUBLE,
+    organizer_id    BIGINT NOT NULL,
+    category_id     BIGINT,
+    venue_id        BIGINT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_events_organizer FOREIGN KEY (organizer_id) REFERENCES users(id),
+    CONSTRAINT fk_events_category  FOREIGN KEY (category_id)  REFERENCES categories(id),
+    CONSTRAINT fk_events_venue     FOREIGN KEY (venue_id)     REFERENCES venues(id),
+
+    -- Composite index: supports "upcoming PUBLISHED events" queries (Day 3 search).
+    INDEX idx_events_status_date (status, event_date)
+);
+
+-- Full-text search index is added in the Day 3 search step:
+-- ALTER TABLE events ADD FULLTEXT INDEX idx_events_search (title, description);

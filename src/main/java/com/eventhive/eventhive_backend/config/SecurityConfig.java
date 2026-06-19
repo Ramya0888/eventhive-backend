@@ -3,6 +3,7 @@ package com.eventhive.eventhive_backend.config;
 import com.eventhive.eventhive_backend.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -33,15 +34,18 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
 
 
-            .authorizeHttpRequests(auth -> auth
-                    
+           .authorizeHttpRequests(auth -> auth
                     .requestMatchers("/api/auth/**").permitAll()
-                    // Actuator health check — public (for deployment monitoring)
                     .requestMatchers("/actuator/health").permitAll()
-                    // Everything else requires authentication
+
+                    // Public event reads — browsing the catalog needs no login.
+                    // GET only: POST /api/events stays protected by the matcher below + @PreAuthorize.
+                    .requestMatchers(HttpMethod.GET, "/api/events").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/events/{id}").permitAll()
+
+                    // Everything else (incl. POST /api/events and /api/events/my-events) needs auth
                     .anyRequest().authenticated()
             )
-
             
             .sessionManagement(session -> session
                     .sessionCreationPolicy(SessionCreationPolicy.STATELESS)

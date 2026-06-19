@@ -18,7 +18,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.eventhive.eventhive_backend.dto.RefreshTokenRequest;
+import com.eventhive.eventhive_backend.exception.InvalidTokenException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -88,6 +89,7 @@ public class AuthService {
      * LOGIN — authenticates email + password, returns tokens.
     
      */
+    @Transactional(readOnly = true) 
     public AuthResponse login(LoginRequest request) {
         log.info("Login attempt for email: {}", request.getEmail());
 
@@ -112,6 +114,34 @@ public class AuthService {
         log.info("Login successful for user id: {}", user.getId());
 
         // 3. Generate fresh tokens
+        return buildAuthResponse(user);
+    }
+
+    
+    @Transactional(readOnly = true)
+    public AuthResponse refresh(RefreshTokenRequest request) {
+        String refreshToken = request.getRefreshToken();
+
+        // 1. Reject anything that isn't a valid, unexpired refresh token.
+        boolean valid;
+        try {
+            valid = jwtUtil.isRefreshToken(refreshToken);
+        } catch (Exception e) {
+            throw new InvalidTokenException("Invalid or expired refresh token");
+        }
+        if (!valid) {
+            throw new InvalidTokenException("Invalid or expired refresh token");
+        }
+
+        // 2. Identify the user from the token's subject (email).
+        String email = jwtUtil.extractEmail(refreshToken);
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new InvalidTokenException("User no longer exists"));
+
+        log.info("Refreshing tokens for user id: {}", user.getId());
+
+        // 3. Issue a fresh token pair.
         return buildAuthResponse(user);
     }
 
