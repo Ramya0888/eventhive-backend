@@ -3,6 +3,7 @@ package com.eventhive.eventhive_backend.controller;
 import com.eventhive.eventhive_backend.dto.ApiResponse;
 import com.eventhive.eventhive_backend.dto.CreateEventRequest;
 import com.eventhive.eventhive_backend.dto.EventResponse;
+import com.eventhive.eventhive_backend.dto.PagedResponse;
 import com.eventhive.eventhive_backend.dto.UpdateEventRequest;
 import com.eventhive.eventhive_backend.security.CustomUserDetails;
 import com.eventhive.eventhive_backend.service.EventService;
@@ -14,6 +15,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import com.eventhive.eventhive_backend.entity.User;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
+
 @RestController
 @RequestMapping("/api/events")
 public class EventController {
@@ -37,14 +41,24 @@ public class EventController {
                 .body(ApiResponse.success("Event created successfully", response));
     }
 
-    /**
-     * GET /api/events — public catalog of PUBLISHED events.
+  /**
+     * GET /api/events — paginated, filterable public catalog (PUBLISHED only).
+     * Example: /api/events?categoryId=2&city=Chennai&fromDate=2026-09-01&page=0&size=20
      */
-    @GetMapping
-    public ResponseEntity<ApiResponse<List<EventResponse>>> getPublishedEvents() {
-        List<EventResponse> events = eventService.getPublishedEvents();
-        return ResponseEntity.ok(ApiResponse.success("Events fetched", events));
-    }
+  @GetMapping
+  public ResponseEntity<ApiResponse<PagedResponse<EventResponse>>> getPublishedEvents(
+          @RequestParam(required = false) String keyword,
+          @RequestParam(required = false) Long categoryId,
+          @RequestParam(required = false) String city,
+          @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+          @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+          @RequestParam(defaultValue = "0") int page,
+          @RequestParam(defaultValue = "20") int size) {
+
+      PagedResponse<EventResponse> events = eventService.searchPublishedEvents(
+              keyword, categoryId, city, fromDate, toDate, page, size);
+      return ResponseEntity.ok(ApiResponse.success("Events fetched", events));
+  }
 
     /**
      * GET /api/events/my-events — the logged-in organizer's own events (incl. DRAFTs).

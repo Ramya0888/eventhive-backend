@@ -2,6 +2,7 @@ package com.eventhive.eventhive_backend.service;
 
 import com.eventhive.eventhive_backend.dto.CreateEventRequest;
 import com.eventhive.eventhive_backend.dto.EventResponse;
+import com.eventhive.eventhive_backend.dto.PagedResponse;
 import com.eventhive.eventhive_backend.dto.UpdateEventRequest;
 import com.eventhive.eventhive_backend.entity.Category;
 import com.eventhive.eventhive_backend.entity.Event;
@@ -16,8 +17,17 @@ import lombok.extern.slf4j.Slf4j;
 import com.eventhive.eventhive_backend.exception.InvalidEventStateException;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import com.eventhive.eventhive_backend.dto.PagedResponse;
+import java.time.LocalDate;
+import java.time.LocalDate;
 import java.util.List;
 
 @Slf4j
@@ -238,5 +248,31 @@ public class EventService {
         event.setEndTime(request.getEndTime());
 
         return EventResponse.from(event);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<EventResponse> searchPublishedEvents(
+            String keyword, Long categoryId, String city,
+            LocalDate fromDate, LocalDate toDate, int page, int size) {
+
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        int safePage = Math.max(page, 0);
+
+        Page<Event> result;
+
+        // Branch: keyword present -> relevance-ranked FULLTEXT query (no Sort —
+        // ordering is by MATCH relevance inside the query itself).
+        // keyword absent -> the JPQL filter query, sorted by date.
+        if (keyword != null && !keyword.isBlank()) {
+            Pageable pageable = PageRequest.of(safePage, safeSize); // no Sort: ranked by relevance
+            result = eventRepository.searchEventsByKeyword(
+                    keyword.trim(), categoryId, city, fromDate, toDate, pageable);
+        } else {
+            Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by("eventDate").ascending());
+            result = eventRepository.searchEvents(
+                    EventStatus.PUBLISHED, categoryId, city, fromDate, toDate, pageable);
+        }
+
+        return PagedResponse.from(result, EventResponse::from);
     }
 }

@@ -89,5 +89,8 @@ CREATE TABLE IF NOT EXISTS events (
     INDEX idx_events_status_date (status, event_date)
 );
 
--- Full-text search index is added in the Day 3 search step:
--- ALTER TABLE events ADD FULLTEXT INDEX idx_events_search (title, description);
+-- NOTE: Run this once on a fresh database. Unlike the CREATE TABLE IF NOT EXISTS
+-- statements above, this ALTER is not idempotent — re-running it on a DB that
+-- already has the index will error with "Duplicate key name". Skip it if the
+-- index already exists (check: SHOW INDEX FROM events WHERE Key_name='idx_events_search').
+ALTER TABLE events ADD FULLTEXT INDEX idx_events_search (title, description);
