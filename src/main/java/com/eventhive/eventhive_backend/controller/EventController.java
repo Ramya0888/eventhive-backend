@@ -144,4 +144,10 @@ public class EventController {
         EventResponse e = eventService.updateEvent(id, request, principal.getUser());
         return ResponseEntity.ok(ApiResponse.success("Event updated successfully", e));
     }
+    @GetMapping("/pending")
+@PreAuthorize("hasRole('ADMIN')")
+public ResponseEntity<ApiResponse<List<EventResponse>>> getPendingEvents() {
+    return ResponseEntity.ok(
+        ApiResponse.success("Pending events fetched", eventService.getPendingEvents()));
+}
 }

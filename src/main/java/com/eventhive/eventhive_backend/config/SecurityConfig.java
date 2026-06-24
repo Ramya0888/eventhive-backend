@@ -16,6 +16,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 
+import org.springframework.security.config.Customizer;
+
 @Configuration
 @EnableMethodSecurity 
 public class SecurityConfig {
@@ -30,11 +32,12 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-        
+            .cors(Customizer.withDefaults())     
             .csrf(AbstractHttpConfigurer::disable)
 
 
            .authorizeHttpRequests(auth -> auth
+            .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                     .requestMatchers("/api/auth/**").permitAll()
                     .requestMatchers("/actuator/health").permitAll()
 
@@ -42,7 +45,8 @@ public class SecurityConfig {
                     // GET only: POST /api/events stays protected by the matcher below + @PreAuthorize.
                     .requestMatchers(HttpMethod.GET, "/api/events").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/{id}").permitAll()
-
+                    .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/events/{eventId}/seats").permitAll()
                     // Everything else (incl. POST /api/events and /api/events/my-events) needs auth
                     .anyRequest().authenticated()
             )

@@ -7,6 +7,8 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.math.BigDecimal;
+    import java.util.List;
 
 /**
  * Incoming JSON for POST /api/events.
@@ -35,9 +37,7 @@ public class CreateEventRequest {
     private LocalTime startTime;
     private LocalTime endTime;
 
-    @Min(value = 1, message = "Total capacity must be at least 1")
-    private int totalCapacity;
-
+  
     
     @NotNull(message = "Venue is required")
     @Valid
@@ -54,5 +54,25 @@ public class CreateEventRequest {
 
         @NotBlank(message = "Venue city is required")
         private String city;
+    }
+    // List of seat category definitions — the service generates
+    // individual seat rows from these.
+    @NotNull(message = "At least one seat category is required")
+    @Size(min = 1, message = "At least one seat category is required")
+    private List<@Valid SeatCategoryRequest> seatCategories;
+
+    @Getter
+    @Setter
+    public static class SeatCategoryRequest {
+
+        @NotBlank(message = "Category name is required")
+        private String name;
+
+        @NotNull(message = "Price is required")
+        @DecimalMin(value = "0.0", message = "Price must be non-negative")
+        private BigDecimal price;
+
+        @Min(value = 1, message = "Count must be at least 1")
+        private int count;
     }
 }

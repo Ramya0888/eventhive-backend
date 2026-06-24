@@ -6,13 +6,18 @@ import com.eventhive.eventhive_backend.dto.PagedResponse;
 import com.eventhive.eventhive_backend.dto.UpdateEventRequest;
 import com.eventhive.eventhive_backend.entity.Category;
 import com.eventhive.eventhive_backend.entity.Event;
+import com.eventhive.eventhive_backend.entity.Seat;
+import com.eventhive.eventhive_backend.entity.SeatCategory;
 import com.eventhive.eventhive_backend.entity.User;
 import com.eventhive.eventhive_backend.entity.Venue;
 import com.eventhive.eventhive_backend.enums.EventStatus;
+import com.eventhive.eventhive_backend.enums.SeatStatus;
 import com.eventhive.eventhive_backend.exception.ResourceNotFoundException;
 import com.eventhive.eventhive_backend.repository.CategoryRepository;
 import com.eventhive.eventhive_backend.repository.EventRepository;
 import com.eventhive.eventhive_backend.repository.VenueRepository;
+import com.eventhive.eventhive_backend.repository.SeatCategoryRepository;
+import com.eventhive.eventhive_backend.repository.SeatRepository;
 import lombok.extern.slf4j.Slf4j;
 import com.eventhive.eventhive_backend.exception.InvalidEventStateException;
 import java.util.stream.Collectors;
@@ -37,52 +42,91 @@ public class EventService {
     private final EventRepository eventRepository;
     private final VenueRepository venueRepository;
     private final CategoryRepository categoryRepository;
+    private final SeatCategoryRepository seatCategoryRepository;
+    private final SeatRepository seatRepository;
 
     public EventService(EventRepository eventRepository,
                         VenueRepository venueRepository,
-                        CategoryRepository categoryRepository) {
+                        CategoryRepository categoryRepository,
+                        SeatCategoryRepository seatCategoryRepository,
+                        SeatRepository seatRepository) {
         this.eventRepository = eventRepository;
         this.venueRepository = venueRepository;
         this.categoryRepository = categoryRepository;
+        this.seatCategoryRepository = seatCategoryRepository;
+        this.seatRepository = seatRepository;
     }
 
    
-    @Transactional
+@Transactional
     public EventResponse createEvent(CreateEventRequest request, User organizer) {
         log.info("Organizer {} creating event '{}'", organizer.getId(), request.getTitle());
 
-        // 1. Validate the category exists (FK integrity at the app layer too).
+        // 1. Validate category
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Category not found: " + request.getCategoryId()));
 
-        // 2. Create the venue 
+        // 2. Derive total capacity from seat category counts
+        int totalCapacity = request.getSeatCategories().stream()
+                .mapToInt(CreateEventRequest.SeatCategoryRequest::getCount)
+                .sum();
+
+        // 3. Create venue
         Venue venue = Venue.builder()
                 .name(request.getVenue().getName())
                 .address(request.getVenue().getAddress())
                 .city(request.getVenue().getCity())
-                .totalCapacity(request.getTotalCapacity())
+                .totalCapacity(totalCapacity)
                 .build();
         venue = venueRepository.save(venue);
 
-        // 3. Create the event in DRAFT, owned by this organizer (write #2).
+        // 4. Create the event
         Event event = Event.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
-                .status(EventStatus.DRAFT)                 // always starts as DRAFT
+                .status(EventStatus.DRAFT)
                 .eventDate(request.getEventDate())
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
-                .availableSeats(request.getTotalCapacity()) // seats start = capacity
+                .availableSeats(totalCapacity)
                 .organizer(organizer)
                 .category(category)
                 .venue(venue)
                 .build();
         event = eventRepository.save(event);
 
-        log.info("Event created with id {}", event.getId());
+        // 5. Generate seat categories and individual seats.
+        // All three writes (event + categories + seats) are in one @Transactional —
+        // if seat generation fails, the event and venue inserts roll back too.
+        // This is ACID atomicity across three tables.
+        for (CreateEventRequest.SeatCategoryRequest catReq : request.getSeatCategories()) {
+            SeatCategory seatCategory = SeatCategory.builder()
+                    .event(event)
+                    .name(catReq.getName())
+                    .price(catReq.getPrice())
+                    .totalCount(catReq.getCount())
+                    .build();
+            seatCategory = seatCategoryRepository.save(seatCategory);
 
-        // Map to DTO while still inside the transaction (LAZY fields load safely).
+            // Generate individual seat rows with padded seat numbers
+            // e.g. VIP-001, VIP-002, ... GEN-042
+            for (int i = 1; i <= catReq.getCount(); i++) {
+                String seatNumber = catReq.getName().toUpperCase().substring(0, Math.min(3, catReq.getName().length()))
+                        + "-" + String.format("%03d", i);
+                Seat seat = Seat.builder()
+                        .event(event)
+                        .seatCategory(seatCategory)
+                        .seatNumber(seatNumber)
+                        .status(SeatStatus.AVAILABLE)
+                        .build();
+                seatRepository.save(seat);
+            }
+        }
+
+        log.info("Event {} created with {} seats across {} categories",
+                event.getId(), totalCapacity, request.getSeatCategories().size());
+
         return EventResponse.from(event);
     }
 
@@ -275,4 +319,11 @@ public class EventService {
 
         return PagedResponse.from(result, EventResponse::from);
     }
+    @Transactional(readOnly = true)
+public List<EventResponse> getPendingEvents() {
+    return eventRepository.findByStatusOrderByCreatedAtAsc(EventStatus.PENDING_APPROVAL)
+            .stream()
+            .map(EventResponse::from)
+            .collect(Collectors.toList());
+}
 }

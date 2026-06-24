@@ -6,6 +6,9 @@ import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.ArrayList; 
+import java.util.List;
 
 @Entity
 @Table(name = "events", indexes = {
@@ -68,4 +71,9 @@ public class Event extends BaseEntity {
     private Venue venue;
 
     // NOTE: @OneToMany List<Seat> is added in Module 3 (Seat Management).
+    // One event has many seats. CascadeType.ALL: deleting an event
+    // cascades to delete its seats. mappedBy points to the owning side.
+    @OneToMany(mappedBy = "event", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @Builder.Default
+    private List<SeatCategory> seatCategories = new ArrayList<>();
 }

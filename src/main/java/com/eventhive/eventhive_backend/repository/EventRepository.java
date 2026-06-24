@@ -24,7 +24,7 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     // Attendee catalog: only PUBLISHED events, soonest first.
     // This is the query the (status, event_date) composite index was built for.
     List<Event> findByStatusOrderByEventDateAsc(EventStatus status);
-
+    List<Event> findByStatusOrderByCreatedAtAsc(EventStatus status);
  
     @Query("""
             SELECT e FROM Event e
