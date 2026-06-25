@@ -47,6 +47,7 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/api/events/{id}").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/{eventId}/seats").permitAll()
+
                     // Everything else (incl. POST /api/events and /api/events/my-events) needs auth
                     .anyRequest().authenticated()
             )

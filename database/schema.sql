@@ -173,3 +173,97 @@ CREATE TABLE IF NOT EXISTS booking_items (
     CONSTRAINT fk_booking_items_seat     FOREIGN KEY (seat_id)    REFERENCES seats(id),
     CONSTRAINT fk_booking_items_category FOREIGN KEY (seat_category_id) REFERENCES seat_categories(id)
 );
+
+
+-- TABLE: payments
+-- One payment record per successful Razorpay transaction.
+-- Stores Razorpay ids for audit and dispute resolution.
+
+CREATE TABLE IF NOT EXISTS payments (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    booking_id            BIGINT NOT NULL UNIQUE,  -- one payment per booking
+    razorpay_order_id     VARCHAR(100) NOT NULL,
+    razorpay_payment_id   VARCHAR(100),            -- null until payment succeeds
+    razorpay_signature    VARCHAR(300),            -- null until verified
+    amount                DECIMAL(10, 2) NOT NULL,
+    status                VARCHAR(20) NOT NULL DEFAULT 'CREATED',
+    created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_payments_order_id (razorpay_order_id),
+
+    CONSTRAINT fk_payments_booking
+        FOREIGN KEY (booking_id) REFERENCES bookings(id)
+);
+
+
+-- ============================================================
+-- VIEW: v_event_summary
+-- Joins events with venues, booking counts, and revenue.
+-- Used by both organizer and admin dashboards.
+ 
+-- ============================================================
+CREATE OR REPLACE VIEW v_event_summary AS
+SELECT
+    e.id                                    AS event_id,
+    e.title                                 AS event_title,
+    e.status                                AS event_status,
+    e.event_date,
+    e.available_seats,
+    u.id                                    AS organizer_id,
+    u.name                                  AS organizer_name,
+    v.city                                  AS venue_city,
+    c.name                                  AS category_name,
+    COUNT(DISTINCT b.id)                    AS total_bookings,
+    COALESCE(SUM(p.amount), 0)              AS total_revenue
+FROM events e
+JOIN users u        ON u.id = e.organizer_id
+LEFT JOIN venues v  ON v.id = e.venue_id
+LEFT JOIN categories c ON c.id = e.category_id
+LEFT JOIN bookings b
+    ON b.event_id = e.id
+    AND b.status IN ('CONFIRMED')
+LEFT JOIN payments p
+    ON p.booking_id = b.id
+    AND p.status = 'SUCCESS'
+GROUP BY
+    e.id, e.title, e.status, e.event_date,
+    e.available_seats, u.id, u.name,
+    v.city, c.name;
+
+
+-- ============================================================
+-- STORED PROCEDURE: sp_organizer_revenue
+-- Returns revenue breakdown for a specific organizer
+-- between two dates.
+
+-- ============================================================
+DELIMITER //
+CREATE PROCEDURE sp_organizer_revenue(
+    IN  p_organizer_id BIGINT,
+    IN  p_from_date    DATE,
+    IN  p_to_date      DATE
+)
+BEGIN
+    SELECT
+        e.id                            AS event_id,
+        e.title                         AS event_title,
+        e.event_date,
+        COUNT(DISTINCT b.id)            AS confirmed_bookings,
+        COALESCE(SUM(p.amount), 0)      AS revenue,
+        RANK() OVER (
+            ORDER BY COALESCE(SUM(p.amount), 0) DESC
+        )                               AS revenue_rank
+    FROM events e
+    LEFT JOIN bookings b
+        ON b.event_id = e.id
+        AND b.status = 'CONFIRMED'
+    LEFT JOIN payments p
+        ON p.booking_id = b.id
+        AND p.status = 'SUCCESS'
+    WHERE e.organizer_id = p_organizer_id
+      AND e.event_date BETWEEN p_from_date AND p_to_date   -- moved here
+    GROUP BY e.id, e.title, e.event_date
+    ORDER BY revenue DESC;
+END //
+DELIMITER ;
