@@ -267,3 +267,58 @@ BEGIN
     ORDER BY revenue DESC;
 END //
 DELIMITER ;
+
+
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    table_name  VARCHAR(50),
+    record_id   BIGINT,
+    action      VARCHAR(20),
+    old_value   VARCHAR(100),
+    new_value   VARCHAR(100),
+    changed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+DROP TRIGGER IF EXISTS trg_booking_status_change;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_booking_status_change
+AFTER UPDATE ON bookings
+FOR EACH ROW
+BEGIN
+    IF OLD.status != NEW.status THEN
+        INSERT INTO audit_logs (table_name, record_id, action, old_value, new_value)
+        VALUES ('bookings', NEW.id, 'STATUS_CHANGE', OLD.status, NEW.status);
+    END IF;
+END$$
+
+DELIMITER ;
+
+--//for scanning and verification 
+ALTER TABLE bookings 
+ADD COLUMN checked_in BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN checked_in_at TIMESTAMP NULL;
+
+
+-- ------------------------------------------------------------
+-- TABLE: feedback
+-- Attendee submits text feedback after attending an event.
+-- Gemini analyzes it and classifies as POSITIVE/NEUTRAL/NEGATIVE.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS feedback (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id          BIGINT NOT NULL,
+    event_id         BIGINT NOT NULL,
+    content          TEXT NOT NULL,
+    sentiment        VARCHAR(20),        -- POSITIVE, NEUTRAL, NEGATIVE
+    confidence_score DOUBLE,             -- 0.0 to 1.0
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Index for analytics: "show me all feedback for event X by sentiment"
+    INDEX idx_feedback_event_sentiment (event_id, sentiment),
+
+    CONSTRAINT fk_feedback_user  FOREIGN KEY (user_id)  REFERENCES users(id),
+    CONSTRAINT fk_feedback_event FOREIGN KEY (event_id) REFERENCES events(id)
+);

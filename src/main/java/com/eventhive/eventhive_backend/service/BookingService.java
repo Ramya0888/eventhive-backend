@@ -2,6 +2,7 @@ package com.eventhive.eventhive_backend.service;
 
 import com.eventhive.eventhive_backend.dto.BookingResponse;
 import com.eventhive.eventhive_backend.dto.CreateBookingRequest;
+import com.eventhive.eventhive_backend.dto.ScanResponse;
 import com.eventhive.eventhive_backend.entity.*;
 import com.eventhive.eventhive_backend.enums.BookingStatus;
 import com.eventhive.eventhive_backend.enums.SeatStatus;
@@ -15,7 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-
+import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -239,4 +240,81 @@ public class BookingService {
         return "EVH" + UUID.randomUUID().toString()
                 .replace("-", "").substring(0, 8).toUpperCase();
     }
+    /**
+ * SCAN TICKET — validates a QR code scan at venue entry.
+ *
+ * Checks in order:
+ * 1. Booking reference exists
+ * 2. Booking is CONFIRMED (paid)
+ * 3. Event belongs to this organizer (can't scan other events)
+ * 4. Not already checked in (duplicate scan prevention)
+ *
+ * Returns a clear VALID/INVALID response with a reason so the
+ * scanner app can show green/red to the staff member.
+ */
+@Transactional
+public ScanResponse scanTicket(String bookingReference, User organizer) {
+    Optional<Booking> optBooking =
+            bookingRepository.findByBookingReference(bookingReference);
+
+    // 1. Reference not found
+    if (optBooking.isEmpty()) {
+        return ScanResponse.builder()
+                .valid(false)
+                .message("Invalid QR code — booking not found")
+                .build();
+    }
+
+    Booking booking = optBooking.get();
+
+    // 2. Not confirmed (not paid)
+    if (booking.getStatus() != BookingStatus.CONFIRMED) {
+        return ScanResponse.builder()
+                .valid(false)
+                .message("Booking is not confirmed — status: " + booking.getStatus())
+                .build();
+    }
+
+    // 3. Wrong event — organizer can only scan their own events
+    if (!booking.getEvent().getOrganizer().getId().equals(organizer.getId())) {
+        return ScanResponse.builder()
+                .valid(false)
+                .message("This ticket is for a different event")
+                .build();
+    }
+
+    // 4. Already checked in — duplicate scan
+    if (Boolean.TRUE.equals(booking.getCheckedIn())) {
+        return ScanResponse.builder()
+                .valid(false)
+                .message("Already checked in at " + booking.getCheckedInAt())
+                .attendeeName(booking.getUser().getName())
+                .eventTitle(booking.getEvent().getTitle())
+                .build();
+    }
+
+    // All checks passed — mark as checked in
+    booking.setCheckedIn(true);
+    booking.setCheckedInAt(LocalDateTime.now());
+
+    // Build seat list for the response
+    List<BookingItem> items =
+            bookingItemRepository.findByBookingId(booking.getId());
+    String seats = items.stream()
+            .map(i -> i.getSeat().getSeatNumber())
+            .collect(Collectors.joining(", "));
+
+    log.info("Checked in: booking {} for event {} — attendee: {}",
+            bookingReference,
+            booking.getEvent().getTitle(),
+            booking.getUser().getName());
+
+    return ScanResponse.builder()
+            .valid(true)
+            .message("Welcome! Check-in successful")
+            .attendeeName(booking.getUser().getName())
+            .eventTitle(booking.getEvent().getTitle())
+            .seatNumbers(seats)
+            .build();
+}
 }

@@ -23,6 +23,7 @@ public class BookingResponse {
     private LocalDateTime expiresAt;
     private LocalDateTime confirmedAt;
     private List<BookingItemDto> items;
+    private Long eventId;  
 
     @Getter
     @Builder
@@ -53,6 +54,7 @@ public class BookingResponse {
                 .expiresAt(booking.getExpiresAt())
                 .confirmedAt(booking.getConfirmedAt())
                 .items(itemDtos)
+                .eventId(booking.getEvent().getId())
                 .build();
     }
 }

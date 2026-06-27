@@ -3,6 +3,7 @@ package com.eventhive.eventhive_backend.controller;
 import com.eventhive.eventhive_backend.dto.ApiResponse;
 import com.eventhive.eventhive_backend.dto.BookingResponse;
 import com.eventhive.eventhive_backend.dto.CreateBookingRequest;
+import com.eventhive.eventhive_backend.dto.ScanResponse;
 import com.eventhive.eventhive_backend.entity.User;
 import com.eventhive.eventhive_backend.security.CustomUserDetails;
 import com.eventhive.eventhive_backend.service.BookingService;
@@ -68,4 +69,15 @@ public class BookingController {
                 id, principal.getUser());
         return ResponseEntity.ok(ApiResponse.success("Booking cancelled", response));
     }
+
+@PostMapping("/scan")
+@PreAuthorize("hasRole('ORGANIZER')")
+public ResponseEntity<ApiResponse<ScanResponse>> scanTicket(
+        @RequestParam String bookingReference,
+        @AuthenticationPrincipal CustomUserDetails principal) {
+
+    ScanResponse response = bookingService.scanTicket(
+            bookingReference, principal.getUser());
+    return ResponseEntity.ok(ApiResponse.success("Scan processed", response));
+}
 }

@@ -55,4 +55,11 @@ public class Booking extends BaseEntity {
                cascade = CascadeType.ALL)
     @Builder.Default
     private List<BookingItem> items = new ArrayList<>();
+
+    @Column(name = "checked_in")
+@Builder.Default
+private Boolean checkedIn = false;
+
+@Column(name = "checked_in_at")
+private LocalDateTime checkedInAt;
 }

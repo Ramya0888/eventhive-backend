@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Optional;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -40,6 +41,7 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final BookingRepository bookingRepository;
     private final BookingItemRepository bookingItemRepository;
+    private final TicketService ticketService;
 
     @Value("${razorpay.key.id}")
     private String keyId;
@@ -49,10 +51,12 @@ public class PaymentService {
 
     public PaymentService(PaymentRepository paymentRepository,
                           BookingRepository bookingRepository,
-                          BookingItemRepository bookingItemRepository) {
+                          BookingItemRepository bookingItemRepository,
+                          TicketService ticketService) {
         this.paymentRepository = paymentRepository;
         this.bookingRepository = bookingRepository;
         this.bookingItemRepository = bookingItemRepository;
+        this.ticketService = ticketService;
     }
 
     @Transactional
@@ -78,6 +82,20 @@ public class PaymentService {
                     "Booking has expired. Please select seats again.",
                     HttpStatus.GONE);   // 410 Gone — resource existed but is now gone
         }
+        // In PaymentService.createOrder(), add this check after the booking validation:
+Optional<Payment> existingPayment = paymentRepository.findByBookingId(booking.getId());
+if (existingPayment.isPresent() && existingPayment.get().getStatus() == PaymentStatus.CREATED) {
+    // Order already created — return the existing order id
+    // so the frontend can reopen the checkout popup
+    Payment existing = existingPayment.get();
+    return CreateOrderResponse.builder()
+            .razorpayOrderId(existing.getRazorpayOrderId())
+            .amount(booking.getTotalAmount())
+            .currency("INR")
+            .bookingReference(bookingReference)
+            .keyId(keyId)
+            .build();
+}
 
         try {
             RazorpayClient client = new RazorpayClient(keyId, keySecret);
@@ -164,6 +182,10 @@ public class PaymentService {
 
         log.info("Payment verified for booking {} — {} seats BOOKED",
                 booking.getBookingReference(), items.size());
+
+                // Fire-and-forget: generate QR + PDF + send email in background thread.
+                // @Async means this returns immediately — the HTTP response doesn't wait.
+                ticketService.generateAndSendTicket(booking);
 
         return BookingResponse.from(booking);
     }
