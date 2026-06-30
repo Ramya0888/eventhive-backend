@@ -36,7 +36,7 @@ public class TicketService {
    
     
     private final TicketDataLoader ticketDataLoader;
-    @Value("${spring.mail.username}")
+    @Value("${mail.from.address}")
     private String fromEmail;
 
     public TicketService(JavaMailSender mailSender,
